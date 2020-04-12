@@ -8,7 +8,7 @@ export async function parseTable(collection, basePath = './', xmlTags, fileName,
     throw new Error(`
     Обязательно должна быть функция, 
     которая создает объект поиска имеющегося объекта.
-    Сейчас она ${updateQuery}`)
+    Сейчас она ${updateQuery.toString()}`)
   }
 
   console.log('Начало парсинга ' + fileName);
@@ -65,7 +65,8 @@ export async function parseTable(collection, basePath = './', xmlTags, fileName,
 
 
 export async function parseFolder(pathToFolder, parseOptions){
-  const files = await fsp.readdir(pathToFolder, {withFileTypes: true})
+  // смотрит какие файлы в папке, заносит их в бд потом все удаляет
+  const files = await fsp.readdir(pathToFolder, { withFileTypes: true })
 
   const xmlFiles = files.filter(item => item.isFile() && extname(item.name).toLocaleLowerCase() === '.xml')
 

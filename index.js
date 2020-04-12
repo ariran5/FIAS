@@ -3,12 +3,7 @@ import { parseFolder } from './parseFIASDb.js'
 import { parse, join } from 'path'
 
 import { downloadLastArchive, checkUpdatesBase } from './fnsAPI.js'
-import unrar from './unrar.js'
-
-const {
-  MongoClient,
-} = mongo
-
+import extract from 'extract-zip'
 
 export default class FIAS {
   // Database Name
@@ -19,7 +14,7 @@ export default class FIAS {
       url = 'mongodb://localhost:27017'
     } = options
 
-    this.connection = new MongoClient(url).connect()
+    this.connection = mongo.connect(url)
 
   }
 
@@ -144,6 +139,7 @@ export default class FIAS {
     })
   }
 
+  // получить из бд последнюю версию загруженного релиза
   get lastVersionObj() {
     return this.connection
       .then(client => {
@@ -157,6 +153,7 @@ export default class FIAS {
       })
   }
 
+  // проверить обновления и скачать и распарсить
   async checkUpdate(){
     console.log('Проверка обновлений')
     const {
@@ -190,9 +187,15 @@ export default class FIAS {
         console.log(`База ${obj.id} загружена`)
 
         try {
-          coll.updateOne(obj, { $set: obj, $unset: {'isLoading': } })
+          coll.updateOne(obj, { $set: obj, $unset: {'isLoading': ''} })
         } catch {
           console.error('Не удалось убрать статус загрузки у объекта релиза в коллекции с версиями')
+          console.error('Пробую еще раз')
+          coll.updateOne(obj, { $set: obj, $unset: {'isLoading': ''} })
+            .catch(err => {
+              console.error('Да, все-таки не удалось... убрать статус загрузки у объекта релиза в коллекции с версиями', obj)
+              throw err
+            })
         }
 
       } catch (error) {
@@ -235,17 +238,20 @@ export default class FIAS {
 
   }
 
-  unrarAndParse = async ({
-    id,
-    filename,
-    localPath
-  }) => {
+  unrarAndParse = async (releaseObj) => {
+    // разархивирует и парсит поля в базу
+    const {
+      id,
+      filename,
+      localPath
+    } = releaseObj
+
     const {
       dir,
       name
     } = parse(localPath)
-  
-    unrar(localPath, join(dir, name))
+    
+    extract(localPath, { dir: path.resolve(dir) })
   
     await parseFolder(join(dir, name), await this.getDBParseOptions())
       .then(() => console.log("Пропарсен " + id))

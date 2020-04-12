@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "extract-zip": "^2.0.0",
     "fast-xml-parser": "^3.15.1",
     "mongodb": "^3.4.0",
     "node-unrar-js": "^0.8.1",

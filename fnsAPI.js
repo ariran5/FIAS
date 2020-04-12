@@ -7,6 +7,8 @@ const link = (fileName, version) => `https://fias.nalog.ru/Public/Downloads/${ve
 
 const dirFIASFiles = './rawFIASXMLFiles/'
 
+
+// чекает есть ли папка, если нет - создает
 export function checkDirForFiles(name = ''){
   const url = join(dirFIASFiles, name.toString())
 
@@ -27,6 +29,7 @@ export function checkDirForFiles(name = ''){
 
 }
 
+// скачивает последний полный архив
 export async function downloadLastArchive() {
   const {
     id: actualVersion,
@@ -81,7 +84,8 @@ export async function downloadLastArchive() {
   }
 }
 
-
+// загружает определенный релиз в папку /${dirFIASFiles}/номер релиза/
+// только изменения от 1 к 2 релизу, не все объекты
 export async function downloadUpdate(objOfRelease) {
   const {
     id: actualVersion,
@@ -92,8 +96,10 @@ export async function downloadUpdate(objOfRelease) {
     base: filename
   } = parse(urlToFullArchive)
   
+  // полный путь до файла куда скачать
   const localPath = join(dirFIASFiles, actualVersion.toString(), filename)
   
+  // создает папку с номером релиза если ее нет
   await checkDirForFiles( actualVersion )
 
   const ws = createWriteStream(localPath)
@@ -126,40 +132,46 @@ export async function downloadUpdate(objOfRelease) {
   })
 }
 
-
-export async function checkUpdatesBase(lastReleaseId, beforeDownloadCb, cb){
+export async function checkUpdatesBase(lastReleaseId, beforeDownloadCb = () => {}, cb){
+  // смотрит последний релиз, его номер, получает остальные релизы и по одному их загружает
   const releases = await getInfoAboutReleases()
-    .then(data => data.filter(item => +item.id > +lastReleaseId).reverse())
-
+  .then(data => data.filter(item => +item.id > +lastReleaseId).reverse())
+  
   for (const item of releases) {
     if (beforeDownloadCb) {
+      // перед загрузкой вызывается beforeDownloadCb, если он вернул false то загрузки этого релиза не будет
       var beforeDownloadCbRes = await beforeDownloadCb(item)
     }
     if (beforeDownloadCbRes === false) {
+      // и код перейдет к следующему
       continue
     }
     const result = await downloadUpdate(item)
-      .catch(err => {
-        if (cb) {
-          cb(err)
-        } else {
-          throw err
-        }
-      })
+    .catch(err => {
+      if (cb) {
+        cb(err)
+      } else {
+        throw err
+      }
+    })
     
     if (cb) {
+      // в cb передается 1 ошибка 2 результат
       await cb(null, result)
     }
   }
 
 }
 
+// получить инфо о последнем или обо всех релизах
 export function getInfoAboutReleases(type = 'all'){
   const fias_url = 'https://fias.nalog.ru/WebServices/Public/DownloadService.asmx'
+
   const methods = {
     all: 'GetAllDownloadFileInfo',
     last: 'GetLastDownloadFileInfo'
   }
+
   const body  = `
   <?xml version="1.0" encoding="utf-8"?>
   <soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
