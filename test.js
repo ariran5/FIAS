@@ -1,6 +1,6 @@
 import * as fiasAPI from './fnsAPI.js'
+import { parseFolder } from './parseFIASDb.js'
 
-import unrar from './unrar.js'
 import { parse, join } from 'path'
 
 // fiasAPI.getInfoAboutReleases()
@@ -35,4 +35,18 @@ import { parse, join } from 'path'
 import FIAS from './index.js'
 const f = new FIAS()
 
-f.checkUpdate()
+// f.checkUpdate()
+
+
+// fiasAPI.getInfoAboutReleases('last')
+//   .then(release => {
+
+//     fiasAPI.downloadUpdate()
+//       .then(q => q.start())
+//       .then(console.log)
+//   })
+
+f.getDBParseOptions()
+  .then(arr => {
+    parseFolder('./rawFIASXMLFiles/611/', arr)
+  })

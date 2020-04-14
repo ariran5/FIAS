@@ -1,4 +1,4 @@
-import Parser from 'node-xml-stream-parser'
+import sax from 'sax'
 import fs, { createReadStream, promises as fsp } from 'fs'
 import { join, extname } from 'path'
 
@@ -20,8 +20,8 @@ export async function parseTable(collection, basePath = './', xmlTags, fileName,
     return
   }
 
-
-  const parser = new Parser()
+  const parser = sax.createStream(true)
+  const firstReleaseForThisTable = !(await collection.find().toArray()).length
   
   return new Promise((res, rej) => {
 
@@ -31,16 +31,20 @@ export async function parseTable(collection, basePath = './', xmlTags, fileName,
   
     const read = createReadStream(join(basePath, file.name))
   
-    parser.on('opentag', (name, attrs) => {
+    parser.on('opentag', ({name, attributes:attrs}) => {
       
       if (name === xmlTags.container) {
         return
       }
   
       if (name === xmlTags.base) {
-        collection.update(updateQuery(attrs), attrs, { upsert: true },err => {
-          console.assert(err === null, 'Не удалось вставить ' + name + ' ' + attrs, err)
-        })
+        if (firstReleaseForThisTable) {
+          collection.insertOne(attrs)
+        } else {
+          collection.update(updateQuery(attrs), attrs, { upsert: true },err => {
+            console.assert(err === null, 'Не удалось вставить ' + name + ' ' + attrs, err)
+          })
+        }
       } else {
         console.log(name, 'Неизвестный тег')
       }
@@ -52,7 +56,7 @@ export async function parseTable(collection, basePath = './', xmlTags, fileName,
   
     read.pipe(parser)
   
-    parser.on('finish', err => {
+    parser.on('end', err => {
       if (err) {
         rej(err)
       } else {
@@ -69,7 +73,7 @@ export async function parseFolder(pathToFolder, parseOptions){
   const files = await fsp.readdir(pathToFolder, { withFileTypes: true })
 
   const xmlFiles = files.filter(item => item.isFile() && extname(item.name).toLocaleLowerCase() === '.xml')
-
+  console.info(`Начата работа с папкой, в ней файлов: ${xmlFiles.length}`)
   for (const item of xmlFiles) {
     const option = parseOptions.find(([,,name]) => item.name
       .toLocaleLowerCase()
@@ -88,6 +92,7 @@ export async function parseFolder(pathToFolder, parseOptions){
       option[2],
       option[3]
     )
+    console.info(item.name + ' готов')
   }
 
   console.log(`Работа с папкой ${pathToFolder} завершена, начато удаление`)

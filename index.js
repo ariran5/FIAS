@@ -3,7 +3,6 @@ import { parseFolder } from './parseFIASDb.js'
 import { parse, join } from 'path'
 
 import { downloadLastArchive, checkUpdatesBase } from './fnsAPI.js'
-import extract from 'extract-zip'
 
 export default class FIAS {
   // Database Name
@@ -182,9 +181,7 @@ export default class FIAS {
           isLoading: true
         })
         
-        console.log(`Загрузка начата`)
         await start()
-        console.log(`База ${obj.id} загружена`)
 
         try {
           coll.updateOne(obj, { $set: obj, $unset: {'isLoading': ''} })
@@ -201,9 +198,10 @@ export default class FIAS {
       } catch (error) {
         console.error(error, 'Ошибка в скачивании базы ФИАС')
         coll.deleteOne(obj)
+        return
       }
       console.log('Начата разархивация, она долгая и синхронная, до 15 минут')
-      return this.unrarAndParse(obj)
+      return this.parse(obj)
     }
 
     await checkUpdatesBase(
@@ -232,26 +230,15 @@ export default class FIAS {
 
         await coll.updateOne(releaseObj, { $set: releaseObj })
 
-        return this.unrarAndParse(releaseObj)
+        return this.parse(releaseObj)
       }
     )
 
   }
 
-  unrarAndParse = async (releaseObj) => {
+  parse = async (releaseObj) => {
     // разархивирует и парсит поля в базу
-    const {
-      id,
-      filename,
-      localPath
-    } = releaseObj
-
-    const {
-      dir,
-      name
-    } = parse(localPath)
     
-    extract(localPath, { dir: path.resolve(dir) })
   
     await parseFolder(join(dir, name), await this.getDBParseOptions())
       .then(() => console.log("Пропарсен " + id))
