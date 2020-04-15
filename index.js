@@ -1,8 +1,8 @@
 import mongo from "mongodb"
 import { parseFolder } from './parseFIASDb.js'
-import { parse, join } from 'path'
+import { join } from 'path'
 
-import { downloadLastArchive, checkUpdatesBase } from './fnsAPI.js'
+import { downloadLastArchive, checkUpdatesBase, dirFIASFiles } from './fnsAPI.js'
 
 export default class FIAS {
   // Database Name
@@ -26,10 +26,10 @@ export default class FIAS {
 
     return [
       [
-        db.collection('stat'),
-        { container: 'ActualStatuses', base: 'ActualStatus' },
-        'ACTSTAT',
-        'ACTSTATID',
+        db.collection('stat'), // коллекия в бд
+        { container: 'ActualStatuses', base: 'ActualStatus' }, // имена тегов
+        'ACTSTAT', // имя файла
+        'ACTSTATID', // айдишник этого тега
       ],
       [
         db.collection('addresses'),
@@ -118,7 +118,7 @@ export default class FIAS {
       [
         db.collection('steads'),
         { container: 'Steads', base: 'Stead' },
-        'STEAD',
+        'STEADS',
         'STEADID',
       ],
       [
@@ -181,14 +181,14 @@ export default class FIAS {
           isLoading: true
         })
         
-        await start()
+        const releaseObjWithPaths = await start()
 
         try {
-          coll.updateOne(obj, { $set: obj, $unset: {'isLoading': ''} })
+          coll.updateOne(obj, { $set: releaseObjWithPaths, $unset: {'isLoading': ''} })
         } catch {
           console.error('Не удалось убрать статус загрузки у объекта релиза в коллекции с версиями')
           console.error('Пробую еще раз')
-          coll.updateOne(obj, { $set: obj, $unset: {'isLoading': ''} })
+          coll.updateOne(obj, { $set: releaseObjWithPaths, $unset: {'isLoading': ''} })
             .catch(err => {
               console.error('Да, все-таки не удалось... убрать статус загрузки у объекта релиза в коллекции с версиями', obj)
               throw err
@@ -201,13 +201,13 @@ export default class FIAS {
         return
       }
       console.log('Начата разархивация, она долгая и синхронная, до 15 минут')
-      return this.parse(obj)
+      return this.parse(releaseObjWithPaths)
     }
 
     await checkUpdatesBase(
       id, 
       async releaseObj => {
-
+        console.log(releaseObj)
         return coll.findOne({id: releaseObj.id})
           .then(obj => {
             if (!obj) {
@@ -224,7 +224,7 @@ export default class FIAS {
 
         if (err) {
           coll.deleteOne(releaseObj)
-          console.error(releaseObj, 'Ошибка при скачивании')
+          console.error(releaseObj, 'Ошибка при скачивании', err)
           return
         }
 
@@ -237,10 +237,12 @@ export default class FIAS {
   }
 
   parse = async (releaseObj) => {
-    // разархивирует и парсит поля в базу
-    
+    const {
+      id
+    } = releaseObj
+
   
-    await parseFolder(join(dir, name), await this.getDBParseOptions())
+    await parseFolder(join(dirFIASFiles, id.toString()), await this.getDBParseOptions())
       .then(() => console.log("Пропарсен " + id))
   }
 }

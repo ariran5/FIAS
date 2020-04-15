@@ -4,7 +4,7 @@ import fetch from "node-fetch"
 import mime from 'mime-types'
 import extract from 'extract-zip'
 
-const dirFIASFiles = './rawFIASXMLFiles/'
+export const dirFIASFiles = './rawFIASXMLFiles/'
 
 
 // чекает есть ли папка, если нет - создает
@@ -86,6 +86,7 @@ export async function downloadUpdate(objOfRelease = null) {
           id: actualVersion,
           filename,
           localPath,
+          dir: join(dirFIASFiles, actualVersion.toString())
         })
         console.info(`Загружен релиз ${actualVersion}`)
       })
@@ -117,11 +118,13 @@ export async function downloadUpdate(objOfRelease = null) {
 
 export async function checkUpdatesBase(lastReleaseId, beforeDownloadCb = () => {}, cb){
   // смотрит последний релиз, его номер, получает остальные релизы и по одному их загружает
+  console.info('Начат поиск отсутствующих релизов')
   const releases = await getInfoAboutReleases()
     .then(data => data.filter(item => +item.id > +lastReleaseId).reverse())
-  
+
   for (const item of releases) {
     if (beforeDownloadCb) {
+      
       // перед загрузкой вызывается beforeDownloadCb, если он вернул false то загрузки этого релиза не будет
       var beforeDownloadCbRes = await beforeDownloadCb(item)
     }
@@ -130,9 +133,10 @@ export async function checkUpdatesBase(lastReleaseId, beforeDownloadCb = () => {
       continue
     }
     const result = await downloadUpdate(item)
+      .then(obj => obj.start())
       .catch(err => {
         if (cb) {
-          cb(err)
+          cb(err, item)
         } else {
           throw err
         }
@@ -162,7 +166,7 @@ export function getInfoAboutReleases(type = 'all'){
   return fetch(fiasUrl)
     .then(res => {
       if (res.status !== 200) {
-        throw new Error('Код ответа от ФИАС по СОАП ' + res.statusCode)
+        throw new Error('Код ответа от ФИАС ' + res.status)
       }
       return res.json()
     })

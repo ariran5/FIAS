@@ -35,7 +35,8 @@ import { parse, join } from 'path'
 import FIAS from './index.js'
 const f = new FIAS()
 
-// f.checkUpdate()
+f.checkUpdate()
+  .catch(err => console.error(err))
 
 
 // fiasAPI.getInfoAboutReleases('last')
@@ -46,7 +47,7 @@ const f = new FIAS()
 //       .then(console.log)
 //   })
 
-f.getDBParseOptions()
-  .then(arr => {
-    parseFolder('./rawFIASXMLFiles/611/', arr)
-  })
+// f.getDBParseOptions()
+//   .then(arr => {
+//     parseFolder('./rawFIASXMLFiles/605/', arr)
+//   })

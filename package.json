@@ -15,7 +15,6 @@
     "mime-types": "^2.1.26",
     "mongodb": "^3.4.0",
     "node-fetch": "^2.6.0",
-    "node-xml-stream-parser": "^1.0.11",
-    "sax": "^1.2.4"
+    "saxophone": "^0.6.1"
   }
 }
