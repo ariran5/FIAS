@@ -31,7 +31,6 @@ export function checkDirForFiles(name = ''){
 export function downloadLastArchive(){
   
   return downloadUpdate()
-    .then(({start}) => start())
 
 
 }
