@@ -32,7 +32,7 @@ import { parse, join } from 'path'
 //   unrar(localPath, join(dir, name))
 // })
 
-import FIAS from './index.js'
+import FIAS from './FIAS.js'
 const f = new FIAS()
 
 f.checkUpdate()
