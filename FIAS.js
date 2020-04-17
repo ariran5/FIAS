@@ -13,9 +13,12 @@ export default class FIAS {
       url = 'mongodb://localhost:27017'
     } = options
 
-    this.connection = mongo.connect(url)
+    this.connection = mongo.connect(url, {
+      useUnifiedTopology: true,
+      useNewUrlParser: true,
+    })
       .catch(err => {
-        console.error()
+        console.error(err)
         process.exit(1)
       })
 
@@ -168,7 +171,8 @@ export default class FIAS {
     console.log('Проверка обновлений')
     const {
       id,
-      isLoading
+      isLoading,
+      done,
     } = (await this.lastVersionObj) || {}
 
     const client = await this.connection
@@ -184,27 +188,22 @@ export default class FIAS {
         ...obj
       } = releaseObj
 
-      console.log(`Необходима полная загрузка базы данных ${obj.id}`)
-      
       try {
-        coll.insertOne({
+        console.log(`Необходима полная загрузка базы данных ${obj.id}`)
+        await coll.insertOne({
           ...obj,
           isLoading: true
         })
         
-        const releaseObjWithPaths = await start()
+        var releaseObjWithPaths = await start()
+        
+        releaseObjWithPaths.done = true
 
-        try {
-          coll.updateOne(obj, { $set: releaseObjWithPaths, $unset: {'isLoading': ''} })
-        } catch {
-          console.error('Не удалось убрать статус загрузки у объекта релиза в коллекции с версиями')
-          console.error('Пробую еще раз')
-          coll.updateOne(obj, { $set: releaseObjWithPaths, $unset: {'isLoading': ''} })
-            .catch(err => {
-              console.error('Да, все-таки не удалось... убрать статус загрузки у объекта релиза в коллекции с версиями', obj)
-              throw err
-            })
-        }
+        coll.updateOne(obj, { $set: releaseObjWithPaths, $unset: {'isLoading': ''} })
+          .catch(err => {
+            coll.updateOne(obj, { $set: releaseObjWithPaths, $unset: {'isLoading': ''} })
+          })
+
 
       } catch (error) {
         console.error(error, 'Ошибка в скачивании базы ФИАС')
