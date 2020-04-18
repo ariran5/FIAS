@@ -1,9 +1,9 @@
 import mongo from "mongodb"
 import { parseFolder } from './parseFIASDb.js'
-import { join } from 'path'
+import { resolve, join } from 'path'
 
 import { downloadLastArchive, checkUpdatesBase, downloadUpdate2, getInfoAboutReleases } from './fnsAPI.js'
-import { unlink } from 'fs'
+import { unlink, rmdir, promises as fsp } from 'fs'
 
 export default class FIAS {
   // Database Name
@@ -26,7 +26,7 @@ export default class FIAS {
   }
 
   async query(){
-    await this.connection
+    const client = await this.connection
     const db = client.db(FIAS.#dbName)
 
     return db.collection('houses').findOne()
@@ -133,7 +133,7 @@ export default class FIAS {
       [
         db.collection('steads'),
         { container: 'Steads', base: 'Stead' },
-        'STEAD',
+        'STEADS',
         'STEADID',
       ],
       [
@@ -248,9 +248,9 @@ export default class FIAS {
 
   }
 
-  checkUpdate2(){
+  async checkUpdate2(){
     console.log('Проверка обновлений')
-    let {
+    var {
       id,
     } = (await this.lastVersionObj) || {}
 
@@ -263,18 +263,23 @@ export default class FIAS {
     if (!id) {
       const release = await getInfoAboutReleases('last')
       await verColl.insertOne(release)
-      ;({
+      var {
         id
-      }) = release
+      } = release
 
       var type = 'full'
     }
 
     const releases = await getInfoAboutReleases()
-      .then(rel => rel.filter(({_id}) => id && +id <= +_id))
+      .then(rel => rel.filter(({id: _id}) => {
+        return id && (+id <= +_id)
+      }))
 
+    if (!releases.length) {
+      console.log('Обновлений нет')
+    }
 
-    for (item of releases) {
+    for (const item of releases) {
       const {
         id
       } = item
@@ -283,12 +288,12 @@ export default class FIAS {
         item, 
         {
           type,
-          async beforeAll(releaseObj){
+          beforeAll: async (releaseObj) => {
             const rel = await this.lastVersionObj
             if (rel.isLoaded && rel.isExtracted && rel.isParsed) 
               return 'skip'
           },
-          async beforeStart(releaseObj){
+          beforeStart: async (releaseObj) => {
             const rel = await this.lastVersionObj
             if (rel.isLoaded)
               return 'skip'
@@ -299,7 +304,7 @@ export default class FIAS {
               }
             })
           },
-          async startEnd(){
+          startEnd: async () => {
             verColl.updateOne({id}, {
               $set: {
                 isLoading: false,
@@ -307,7 +312,7 @@ export default class FIAS {
               }
             })
           },
-          async beforeExtract(releaseObj){
+          beforeExtract: async (releaseObj) => {
             const rel = await this.lastVersionObj
             if (rel.isExtracted)
               return 'skip'
@@ -318,7 +323,7 @@ export default class FIAS {
               }
             })
           },
-          async extractEnd(){
+          extractEnd: async () => {
             verColl.updateOne({id}, {
               $set: {
                 isExtracting: false,
@@ -333,19 +338,32 @@ export default class FIAS {
           throw err
         })
 
+      const {
+        dir
+      } = fullReleaseObj
+
       await this.parse(fullReleaseObj, {
-        beforeEntry(file, filename){
+        beforeEntry: async (file, filename) => {
           const rel = await this.lastVersionObj
+          
           if (rel.parsedEntries && rel.parsedEntries.includes(filename)) {
-            unlink(file.name, err => {
-              console.log('Не удалось удалить файл ' + file.name);
+            unlink(resolve(dir, file.name), err => {
+              if (err) {
+                console.log('Не удалось удалить файл ' + file.name);
+                return
+              }
+              console.log(`Файл ${filename} удален`);
             })
             return 'skip'
           }
         },
-        entryEnd(file, filename){
-          unlink(file.name, err => {
-            console.log('Не удалось удалить файл ' + file.name);
+        entryEnd: async (file, filename) => {
+          unlink(resolve(dir, file.name), err => {
+            if (err) {
+              console.log('Не удалось удалить файл ' + file.name);
+              return
+            }
+            console.log(`Файл ${filename} удален`);
           })
           verColl.updateOne({id}, {
             $push: {
@@ -354,6 +372,26 @@ export default class FIAS {
           })
         }
       })
+
+      rmdir(join(dir, 'Schemas'), { recursive: true }, err => {
+        if (err) {
+          console.log('Схемы не удалены', err)
+          return
+        }
+        console.assert(err == null, 'Схемы удалены')
+      })
+
+      fsp.rmdir(dir)
+        .then(() => {
+          console.log(`Папка ${dir} удалена`)
+        })
+        .catch(err => {
+          if (err.code === 'ENOTEMPTY') {
+            console.error(`Удалить папку ${dir} не удалось так как в ней еще есть файлы`)
+          } else {
+            console.log(err);
+          }
+        })
     }
 
   }

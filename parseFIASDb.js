@@ -22,7 +22,7 @@ export async function parseTable(collection, basePath = './', xmlTags, fileName,
 
   const parser = new Saxophone();
   const firstReleaseForThisTable = !(await collection.find().toArray()).length
-  const deleteMode = file.name.indexOf('_DEL_') // файл со списком удаленных
+  const deleteMode = file.name.includes('_DEL_') // файл со списком удаленных
   
   return new Promise((res, rej) => {
     const read = createReadStream(join(basePath, file.name))
@@ -39,11 +39,15 @@ export async function parseTable(collection, basePath = './', xmlTags, fileName,
       }
       
       if (firstReleaseForThisTable) {
-        collection.insertOne(attrs)
+        collection.insertOne(attrs, err => {
+          console.assert(err === null, 'Не удалось вставить ' + name + ' ' + attrs, err)
+        })
       } else if (deleteMode) {
-        collection.deleteOne(updateQuery(attrs))
+        collection.deleteOne(updateQuery(attrs), err => {
+          console.assert(err === null, 'Не удалось удалить ' + name + ' ' + attrs, err)
+        })
       } else {
-        collection.update(updateQuery(attrs), attrs, { upsert: true },err => {
+        collection.replaceOne(updateQuery(attrs), attrs, { upsert: true }, err => {
           console.assert(err === null, 'Не удалось вставить ' + name + ' ' + attrs, err)
         })
       }
@@ -90,7 +94,8 @@ export async function parseFolder(pathToFolder, parseOptions, options = {}){
     const [collection, tags, filename, updateQuery] = option
 
     if (options.beforeEntry) {
-      const result = options.beforeEntry(option[2])
+      const result = await options.beforeEntry(item, filename)
+      console
       if (result === 'skip') {
         continue
       }
@@ -107,17 +112,10 @@ export async function parseFolder(pathToFolder, parseOptions, options = {}){
     parsedFiles.push(filename)
 
     if (options.entryEnd) {
-      options.entryEnd(item, filename, parsedFiles)
+      await options.entryEnd(item, filename, parsedFiles)
     }
   }
 
-  console.log(`Работа с папкой ${pathToFolder} завершена, начато удаление`)
-  fsp.rmdir(pathToFolder)
-    .then(() => {
-      console.log(`Папка ${pathToFolder} удалена`)
-    })
-    .catch(err => {
-      console.error(`Удалить папку ${pathToFolder} не удалось`, err)
-    })
+  console.log(`Работа с папкой ${pathToFolder} завершена`)
 
 }
