@@ -68,12 +68,14 @@ export async function parseTable(collection, basePath = './', xmlTags, fileName,
 
 
 
-export async function parseFolder(pathToFolder, parseOptions){
+export async function parseFolder(pathToFolder, parseOptions, options = {}){
   // смотрит какие файлы в папке, заносит их в бд потом все удаляет
   const files = await fsp.readdir(pathToFolder, { withFileTypes: true })
 
   const xmlFiles = files.filter(item => item.isFile() && extname(item.name).toLocaleLowerCase() === '.xml')
   console.info(`Начата работа с папкой, в ней файлов: ${xmlFiles.length}`)
+
+  const parsedFiles = []
   
   for (const item of xmlFiles) {
     const option = parseOptions.find(([,,name]) => item.name
@@ -85,18 +87,32 @@ export async function parseFolder(pathToFolder, parseOptions){
       console.error('Не обнаружена опция для парсинга файла ' + item.name)
       continue
     }
+    const [collection, tags, filename, updateQuery] = option
+
+    if (options.beforeEntry) {
+      const result = options.beforeEntry(option[2])
+      if (result === 'skip') {
+        continue
+      }
+    }
     
     await parseTable(
-      option[0],
+      collection,
       pathToFolder,
-      option[1],
-      option[2],
-      option[3]
+      tags,
+      filename,
+      updateQuery
     )
+
+    parsedFiles.push(filename)
+
+    if (options.entryEnd) {
+      options.entryEnd(item, filename, parsedFiles)
+    }
   }
 
   console.log(`Работа с папкой ${pathToFolder} завершена, начато удаление`)
-  fsp.rmdir(pathToFolder, { recursive: true })
+  fsp.rmdir(pathToFolder)
     .then(() => {
       console.log(`Папка ${pathToFolder} удалена`)
     })

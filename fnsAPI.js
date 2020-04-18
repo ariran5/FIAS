@@ -180,3 +180,102 @@ export function getInfoAboutReleases(type = 'all'){
     }
   }
 }
+
+export async function downloadUpdate2(objOfRelease = null, options = {}) {
+  const {
+    id: actualVersion,
+    full,
+    diff,
+  } = objOfRelease || await getInfoAboutReleases('last')
+
+  const isDiff = options.type !== 'full'
+  const url = isDiff ? diff: full
+  
+  // номер.zip или номер.diff.zip
+  const filename = `${actualVersion.toString()}${isDiff ? '.diff': ''}.zip`
+  const localPath = join(dirFIASFiles, actualVersion.toString(), filename)
+
+  const releaseObj = Object.assign({}, objOfRelease, {
+    id: actualVersion,
+    filename,
+    localPath,
+    dir: join(dirFIASFiles, actualVersion.toString())
+  })
+
+  if (options.beforeAll) {
+    var beforeAllResult = options.beforeAll(releaseObj)
+
+    if (beforeAllResult === 'fail') {
+      throw new Error('fail in beforeStart hook. ' + JSON.stringify(releaseObj))
+    } else if (beforeStartResult === 'skip') {
+      return releaseObj
+    }
+  }
+
+  await checkDirForFiles( actualVersion )
+  
+  if (options.beforeStart) {
+    var beforeStartResult = await options.beforeStart(releaseObj)
+
+    if (beforeStartResult === 'fail') {
+      throw new Error('fail in beforeStart hook. ' + JSON.stringify(releaseObj))
+    }
+  }
+  
+  // возможность пропустить скачивание
+  if (beforeStartResult !== 'skip') {
+    console.info(`Начато ${isDiff ? 'частичное': 'полное'} скачивание релиза ${actualVersion}`)
+    try {
+      var res = await fetch(url)
+  
+    } catch (err) {
+      console.error('Ошибка скачивания файла версии ' + actualVersion)
+      
+      rmdir(releaseObj.dir, { recursive: true }, err => {
+        if (err)
+          console.error('Не удалось удалить папку ' + actualVersion)
+      })
+      throw err
+    }
+    
+    const ws = createWriteStream(localPath)
+  
+    res.body.pipe(ws)
+  
+    await new Promise((res, rej) => {
+      ws.on('finish', res)
+      ws.on('error', rej)
+    })
+    console.info(`Загружен релиз ${actualVersion}`)
+    options.startEnd && await options.startEnd(releaseObj)
+  }
+  
+  if (options.beforeExtract) {
+    var beforeExtractResult = await options.beforeExtract(releaseObj)
+
+    if (beforeExtractResult === 'fail') {
+      throw new Error('fail in beforeStart hook. ' + JSON.stringify(releaseObj))
+    }
+  }
+  
+  // возможность пропустить скачивание
+  if (beforeExtractResult !== 'skip') {
+    console.info(`Начато разархивирование релиза ${actualVersion}`)
+    await extract(localPath, { dir: resolve(dirFIASFiles, actualVersion.toString()) })
+
+    fsp.unlink(localPath)
+      .then(() => {
+        console.log(`Архив релиза ${actualVersion} удален`)
+      })
+      .catch(() => {
+        console.error(`Архив релиза ${actualVersion} удалить не удалось`)
+      })
+      
+    options.extractEnd && await options.extractEnd(releaseObj)
+  }
+
+  
+
+  console.info(`Релиз ${actualVersion} готов к обработке`)
+  return releaseObj
+}

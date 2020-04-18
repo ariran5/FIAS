@@ -32,11 +32,11 @@ import { parse, join } from 'path'
 //   unrar(localPath, join(dir, name))
 // })
 
-import FIAS from './FIAS.js'
-const f = new FIAS()
+// import FIAS from './FIAS.js'
+// const f = new FIAS()
 
-f.checkUpdate()
-  .catch(err => console.error(err))
+// f.checkUpdate()
+//   .catch(err => console.error(err))
 
 
 // fiasAPI.getInfoAboutReleases('last')

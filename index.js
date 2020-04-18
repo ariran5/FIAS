@@ -1,11 +1,16 @@
 import express from 'express'
 import FIAS from './FIAS.js'
 
+const {
+  MONGO_HOSTNAME = 'localhost',
+  MONGO_PORT = 27017
+} = process.env
+
 const f = new FIAS({
-  url: `mongodb://${process.env.MONGO_HOSTNAME}:27017`
+  url: `mongodb://${MONGO_HOSTNAME}:${MONGO_PORT}`
 })
 
-f.checkUpdate()
+f.checkUpdate2()
   .catch(err => console.error(err))
 
 const port = 1234

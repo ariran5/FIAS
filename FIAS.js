@@ -2,7 +2,8 @@ import mongo from "mongodb"
 import { parseFolder } from './parseFIASDb.js'
 import { join } from 'path'
 
-import { downloadLastArchive, checkUpdatesBase, dirFIASFiles } from './fnsAPI.js'
+import { downloadLastArchive, checkUpdatesBase, downloadUpdate2, getInfoAboutReleases } from './fnsAPI.js'
+import { unlink } from 'fs'
 
 export default class FIAS {
   // Database Name
@@ -132,7 +133,7 @@ export default class FIAS {
       [
         db.collection('steads'),
         { container: 'Steads', base: 'Stead' },
-        'STEADS',
+        'STEAD',
         'STEADID',
       ],
       [
@@ -142,12 +143,13 @@ export default class FIAS {
         'STRSTATID',
       ],
     ].map(item => {
-      item[0].createIndexes([
+      const [collection,,,id] = item
+      collection.createIndexes([
         {
-          key: { [item[3]]: 1 }
+          key: { [id]: 1 }
         }
       ])
-      item[3] = queryFabric(item[3])
+      item[3] = queryFabric(id)
       return item
     })
   }
@@ -246,13 +248,124 @@ export default class FIAS {
 
   }
 
-  parse = async (releaseObj) => {
+  checkUpdate2(){
+    console.log('Проверка обновлений')
+    let {
+      id,
+    } = (await this.lastVersionObj) || {}
+
+    const client = await this.connection
+    
+    const verColl = client
+      .db(FIAS.#dbName)
+      .collection('versions')
+
+    if (!id) {
+      const release = await getInfoAboutReleases('last')
+      await verColl.insertOne(release)
+      ;({
+        id
+      }) = release
+
+      var type = 'full'
+    }
+
+    const releases = await getInfoAboutReleases()
+      .then(rel => rel.filter(({_id}) => id && +id <= +_id))
+
+
+    for (item of releases) {
+      const {
+        id
+      } = item
+
+      const fullReleaseObj = await downloadUpdate2(
+        item, 
+        {
+          type,
+          async beforeAll(releaseObj){
+            const rel = await this.lastVersionObj
+            if (rel.isLoaded && rel.isExtracted && rel.isParsed) 
+              return 'skip'
+          },
+          async beforeStart(releaseObj){
+            const rel = await this.lastVersionObj
+            if (rel.isLoaded)
+              return 'skip'
+  
+            verColl.updateOne({id}, {
+              $set: {
+                isLoading: true
+              }
+            })
+          },
+          async startEnd(){
+            verColl.updateOne({id}, {
+              $set: {
+                isLoading: false,
+                isLoaded: true,
+              }
+            })
+          },
+          async beforeExtract(releaseObj){
+            const rel = await this.lastVersionObj
+            if (rel.isExtracted)
+              return 'skip'
+  
+            verColl.updateOne({id}, {
+              $set: {
+                isExtracting: true,
+              }
+            })
+          },
+          async extractEnd(){
+            verColl.updateOne({id}, {
+              $set: {
+                isExtracting: false,
+                isExtracted: true,
+              }
+            })
+          }
+        }
+      )
+        .catch(err => {
+          verColl.deleteOne({id})
+          throw err
+        })
+
+      await this.parse(fullReleaseObj, {
+        beforeEntry(file, filename){
+          const rel = await this.lastVersionObj
+          if (rel.parsedEntries && rel.parsedEntries.includes(filename)) {
+            unlink(file.name, err => {
+              console.log('Не удалось удалить файл ' + file.name);
+            })
+            return 'skip'
+          }
+        },
+        entryEnd(file, filename){
+          unlink(file.name, err => {
+            console.log('Не удалось удалить файл ' + file.name);
+          })
+          verColl.updateOne({id}, {
+            $push: {
+              parsedEntries: filename
+            }
+          })
+        }
+      })
+    }
+
+  }
+
+  parse = async (releaseObj, options) => {
     const {
-      id
+      id,
+      dir
     } = releaseObj
 
   
-    await parseFolder(join(dirFIASFiles, id.toString()), await this.getDBParseOptions())
+    await parseFolder(dir, await this.getDBParseOptions(), options)
       .then(() => console.log("Пропарсен " + id))
   }
 }
